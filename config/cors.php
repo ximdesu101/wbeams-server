@@ -19,7 +19,17 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+    'allowed_origins' => [
+        // Local development
+        'http://localhost:5173', 
+        'http://localhost:5174', 
+        'http://localhost:5175',
+
+        // Production
+        'https://admin-nwssusjcalerts.vercel.app',
+        'https://operator-nwssusjcalerts.vercel.app',
+        'https://nwssusjcalerts.vercel.app'
+    ],
 
     'allowed_origins_patterns' => [],
 
