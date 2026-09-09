@@ -28,6 +28,13 @@ class PhilSmsService
         if (blank($apiToken) || blank($senderId)) {
             throw new RuntimeException('PhilSMS is not configured. Set PHILSMS_API_TOKEN and PHILSMS_SENDER_ID.');
         }
+        $recipient = preg_replace('/\D+/', '', $recipient);
+
+        if (str_starts_with($recipient, '0')) {
+            $recipient = '63' . substr($recipient, 1);
+        }
+
+        $recipient = '+' . $recipient;
 
         try {
             $response = Http::withToken($apiToken)
