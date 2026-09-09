@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Operator\StoreAlertRequest;
 use App\Jobs\SendAlertEmailNotifications;
+use App\Jobs\SendAlertSmsNotifications;
 use App\Models\Operator\Alert;
 use App\Support\SseNotifier;
 use Illuminate\Http\JsonResponse;
@@ -74,7 +75,7 @@ class AlertController extends Controller
         ]);
     }
 
-    public function store(StoreAlertRequest $request): \Illuminate\Http\JsonResponse
+    public function store(StoreAlertRequest $request): JsonResponse
     {
         $alert = Alert::create([
             ...$request->validated(),
@@ -88,6 +89,10 @@ class AlertController extends Controller
 
         if (in_array('email', $alert->channels, true)) {
             SendAlertEmailNotifications::dispatch($alert);
+        }
+
+        if (in_array('sms', $alert->channels, true)) {
+            SendAlertSmsNotifications::dispatch($alert);
         }
 
         return response()->json($alert, 201);

@@ -50,4 +50,10 @@ class AlertFactory extends Factory
     {
         return $this->state(fn () => ['channels' => ['web_push']]);
     }
+
+    /** Alert with SMS channel. */
+    public function withSms(): static
+    {
+        return $this->state(fn () => ['channels' => ['sms']]);
+    }
 }

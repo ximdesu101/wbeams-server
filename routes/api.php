@@ -118,7 +118,6 @@ Route::prefix('operator/emergency-categories')->middleware('auth:sanctum,operato
     Route::get('/', [OperatorEmergencyCategoryController::class, 'index']);
 });
 
-
 // Operator-managed alerts
 Route::prefix('operator/alerts')->middleware('auth:sanctum,operator')->group(function () {
     Route::get('/', [OperatorAlertController::class, 'index']);
@@ -145,7 +144,7 @@ Route::prefix('recipient')->group(function () {
     });
 });
 
-//Recipient-receving alerts
+// Recipient-receving alerts
 Route::prefix('recipient/alerts')->middleware('auth:sanctum,recipient')->group(function () {
     Route::get('/', [RecipientAlertController::class, 'index']);
     Route::get('/unread-count', [RecipientAlertController::class, 'unreadCount']);
@@ -161,11 +160,15 @@ Route::prefix('recipient/reports')->middleware('auth:sanctum,recipient')->group(
     Route::delete('/{report}', [RecipientReportController::class, 'destroy']);
 });
 
-//Recipient-send alerts
+// Recipient-send alerts
 Route::post('/recipient/emergency-sos', [RecipientReportController::class, 'emergencySos'])
     ->middleware('auth:sanctum,recipient');
 
-//Recipient-acknowledge alerts
+// Recipient-acknowledge alerts
 Route::get('/recipient/alerts/{alert}/acknowledge-email/{recipient}', [RecipientAlertController::class, 'acknowledgeViaEmail'])
     ->name('recipient.alerts.acknowledge-email')
+    ->middleware('signed');
+
+Route::get('/recipient/alerts/{alert}/acknowledge-sms/{recipient}', [RecipientAlertController::class, 'acknowledgeViaSms'])
+    ->name('recipient.alerts.acknowledge-sms')
     ->middleware('signed');

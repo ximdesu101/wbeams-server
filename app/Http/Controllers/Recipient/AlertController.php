@@ -20,7 +20,7 @@ class AlertController extends Controller
     // ============================================================
     public function index(Request $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $reads = AlertRecipientRead::where('recipient_id', $recipient->id)
@@ -51,7 +51,7 @@ class AlertController extends Controller
     // ============================================================
     public function pending(Request $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $alerts = Alert::whereJsonContains('target_roles', $recipient->role)
@@ -73,7 +73,7 @@ class AlertController extends Controller
     // ============================================================
     public function unreadCount(Request $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $count = Alert::whereJsonContains('target_roles', $recipient->role)
@@ -111,7 +111,7 @@ class AlertController extends Controller
     // ============================================================
     public function markAllRead(Request $request): Response
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $unreadAlertIds = Alert::whereJsonContains('target_roles', $recipient->role)
@@ -156,6 +156,35 @@ class AlertController extends Controller
             [
                 'read_at' => now(),
                 'acknowledged_via' => 'email',
+            ]
+        );
+
+        SseNotifier::touch('recipient-alerts');
+
+        return response()->view('emails.alert-acknowledged', [
+            'alert' => $alert,
+            'recipient' => $recipient,
+        ]);
+    }
+
+    // ============================================================
+    // 7. ACKNOWLEDGE VIA SMS — called from the signed link in the
+    //    SMS notification; marks as read and records the channel
+    // ============================================================
+    public function acknowledgeViaSms(Request $request, Alert $alert, Recipient $recipient): View|Response
+    {
+        if (! $request->hasValidSignature()) {
+            abort(403, 'This acknowledgment link is invalid or has expired.');
+        }
+
+        AlertRecipientRead::firstOrCreate(
+            [
+                'alert_id' => $alert->id,
+                'recipient_id' => $recipient->id,
+            ],
+            [
+                'read_at' => now(),
+                'acknowledged_via' => 'sms',
             ]
         );
 
