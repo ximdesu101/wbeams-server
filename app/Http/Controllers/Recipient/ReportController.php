@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Recipient;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Recipient\StoreEmergencySosRequest;
 use App\Http\Requests\Recipient\StoreReportRequest;
+use App\Models\Recipient\Recipient;
 use App\Models\Recipient\Report;
+use App\Services\UserLogService;
 use App\Support\SseNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,7 @@ class ReportController extends Controller
      */
     private function mediaUrl(?string $path): ?string
     {
-        if (!$path) {
+        if (! $path) {
             return null;
         }
 
@@ -30,7 +32,7 @@ class ReportController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function formatReport(Report $report, ?\App\Models\Recipient\Recipient $sender = null): array
+    private function formatReport(Report $report, ?Recipient $sender = null): array
     {
         $sender = $sender ?? $report->recipient;
 
@@ -65,7 +67,7 @@ class ReportController extends Controller
     // ============================================================
     public function index(Request $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $reports = Report::where('recipient_id', $recipient->id)
@@ -83,7 +85,7 @@ class ReportController extends Controller
     // ============================================================
     public function store(StoreReportRequest $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $videoPath = null;
@@ -113,6 +115,8 @@ class ReportController extends Controller
 
         SseNotifier::touch('reports');
 
+        UserLogService::log($recipient, 'Sent a report');
+
         return response()->json([
             'message' => 'Report submitted successfully.',
             'data' => $this->formatReport($report, $recipient),
@@ -125,14 +129,14 @@ class ReportController extends Controller
     // ============================================================
     public function destroy(Request $request, int $report): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $model = Report::where('id', $report)
             ->where('recipient_id', $recipient->id)
             ->first();
 
-        if (!$model) {
+        if (! $model) {
             return response()->json([
                 'message' => 'Report not found.',
             ], 404);
@@ -157,7 +161,7 @@ class ReportController extends Controller
 
     public function emergencySos(StoreEmergencySosRequest $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $recipient */
+        /** @var Recipient $recipient */
         $recipient = $request->user();
 
         $report = Report::create([
@@ -175,6 +179,8 @@ class ReportController extends Controller
         $report->setRelation('recipient', $recipient);
 
         SseNotifier::touch('reports');
+
+        UserLogService::log($recipient, 'Sent a report');
 
         return response()->json([
             'message' => 'Emergency SOS submitted successfully.',

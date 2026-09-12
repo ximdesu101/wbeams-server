@@ -14,7 +14,8 @@ class AlertController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Alert::with([
-            'alertType:id,name,icon,color',
+            'alertType:id,name,icon,color,emergency_category_id',
+            'alertType.emergencyCategory:id,name',
             'operator:id,first_name,last_name',
         ])->orderByDesc('sent_at');
 
@@ -48,14 +49,15 @@ class AlertController extends Controller
 
         $mapped = $alerts->getCollection()->map(function ($alert) {
             return [
-                'id'            => $alert->id,
-                'EmergencyType' => $alert->alertType->name ?? $alert->title,
-                'Description'   => $alert->message ?? $alert->response_instructions,
-                'location'      => $alert->response_instructions['location'] ?? '',
-                'severity'     => $alert->severity,
-                'status'        => $alert->status,
-                'reportedBy'    => trim(($alert->operator->first_name ?? '') . ' ' . ($alert->operator->last_name ?? '')),
-                'date'          => $alert->sent_at->toDateString(),
+                'id' => $alert->id,
+                'EmergencyType' => $alert->alertType->emergencyCategory->name ?? '',
+                'alert_type' => $alert->alertType->name ?? $alert->title,
+                'Description' => $alert->message ?? '',
+                'severity' => $alert->severity,
+                'status' => $alert->status,
+                'reportedBy' => trim(($alert->operator->first_name ?? '').' '.($alert->operator->last_name ?? '')),
+                'time' => $alert->sent_at->format('h:i A'),
+                'date' => $alert->sent_at->toDateString(),
             ];
         });
 
@@ -63,9 +65,9 @@ class AlertController extends Controller
             'data' => $mapped,
             'meta' => [
                 'current_page' => $alerts->currentPage(),
-                'last_page'    => $alerts->lastPage(),
-                'per_page'     => $alerts->perPage(),
-                'total'        => $alerts->total(),
+                'last_page' => $alerts->lastPage(),
+                'per_page' => $alerts->perPage(),
+                'total' => $alerts->total(),
             ],
         ]);
     }
@@ -83,10 +85,10 @@ class AlertController extends Controller
 
         return response()->json([
             'data' => [
-                'total'      => $total,
-                'sent'       => (int) ($byStatus['sent'] ?? 0),
-                'resolved'   => (int) ($byStatus['resolved'] ?? 0),
-                'cancelled'  => (int) ($byStatus['cancelled'] ?? 0),
+                'total' => $total,
+                'sent' => (int) ($byStatus['sent'] ?? 0),
+                'resolved' => (int) ($byStatus['resolved'] ?? 0),
+                'cancelled' => (int) ($byStatus['cancelled'] ?? 0),
                 // Keep "acknowledged" key so existing UI doesn't break
                 // (real acknowledgements live in alert_recipient_reads)
                 'acknowledged' => (int) AlertRecipientRead::count(),
@@ -98,7 +100,7 @@ class AlertController extends Controller
     {
         $channelKeys = ['email', 'web_push', 'sms'];
         $totals = array_fill_keys($channelKeys, 0);
-        $acked  = array_fill_keys($channelKeys, 0);
+        $acked = array_fill_keys($channelKeys, 0);
 
         // Efficient channel counts (still scans channels JSON, but only the one column)
         // If this becomes slow later, normalize channels into a pivot table.
@@ -118,42 +120,42 @@ class AlertController extends Controller
             ->groupBy('acknowledged_via')
             ->pluck('total', 'acknowledged_via');
 
-        $acked['email']    = (int) ($ackCounts['email'] ?? 0);
+        $acked['email'] = (int) ($ackCounts['email'] ?? 0);
         $acked['web_push'] = (int) ($ackCounts['in-app'] ?? 0);
-        $acked['sms']      = 0;
+        $acked['sms'] = 0;
 
         $channels = [
             [
-                'key'       => 'email',
-                'name'      => 'Email',
-                'total'     => $totals['email'],
+                'key' => 'email',
+                'name' => 'Email',
+                'total' => $totals['email'],
                 'delivered' => $totals['email'],
-                'acked'     => $acked['email'],
-                'queued'    => 0,
+                'acked' => $acked['email'],
+                'queued' => 0,
             ],
             [
-                'key'       => 'web_push',
-                'name'      => 'In-app',
-                'total'     => $totals['web_push'],
+                'key' => 'web_push',
+                'name' => 'In-app',
+                'total' => $totals['web_push'],
                 'delivered' => $totals['web_push'],
-                'acked'     => $acked['web_push'],
-                'queued'    => 0,
+                'acked' => $acked['web_push'],
+                'queued' => 0,
             ],
             [
-                'key'       => 'sms',
-                'name'      => 'SMS',
-                'total'     => $totals['sms'],
+                'key' => 'sms',
+                'name' => 'SMS',
+                'total' => $totals['sms'],
                 'delivered' => $totals['sms'],
-                'acked'     => $acked['sms'],
-                'queued'    => 0,
+                'acked' => $acked['sms'],
+                'queued' => 0,
             ],
         ];
 
         return response()->json([
             'data' => [
-                'channels'       => $channels,
+                'channels' => $channels,
                 'total_messages' => array_sum($totals),
-                'total_acked'    => array_sum($acked),
+                'total_acked' => array_sum($acked),
             ],
         ]);
     }

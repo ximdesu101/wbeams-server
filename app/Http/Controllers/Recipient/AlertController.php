@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Operator\Alert;
 use App\Models\Operator\AlertRecipientRead;
 use App\Models\Recipient\Recipient;
+use App\Services\UserLogService;
 use App\Support\SseNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -101,6 +102,8 @@ class AlertController extends Controller
             ]
         );
 
+        UserLogService::log($request->user(), 'Acknowledged an alert');
+
         SseNotifier::touch('recipient-alerts');
 
         return response()->noContent();
@@ -131,6 +134,7 @@ class AlertController extends Controller
 
         if ($rows->isNotEmpty()) {
             AlertRecipientRead::insert($rows->toArray());
+            UserLogService::log($recipient, 'Acknowledged an alert');
         }
 
         SseNotifier::touch('recipient-alerts');
@@ -158,6 +162,8 @@ class AlertController extends Controller
                 'acknowledged_via' => 'email',
             ]
         );
+
+        UserLogService::log($recipient, 'Acknowledged an alert');
 
         SseNotifier::touch('recipient-alerts');
 
@@ -187,6 +193,8 @@ class AlertController extends Controller
                 'acknowledged_via' => 'sms',
             ]
         );
+
+        UserLogService::log($recipient, 'Acknowledged an alert');
 
         SseNotifier::touch('recipient-alerts');
 

@@ -10,6 +10,7 @@ use App\Http\Requests\Recipient\VerifyRecipientRequest;
 use App\Models\Admin\Masterlist;
 use App\Models\Recipient\AccessRequest;
 use App\Models\Recipient\Recipient;
+use App\Services\UserLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -159,6 +160,8 @@ class RecipientAuthController extends Controller
 
         RateLimiter::clear($throttleKey);
 
+        UserLogService::log($recipient, 'Logged in');
+
         $token = $recipient->createToken('recipient-token', ['*'], now()->addDays(7))->plainTextToken;
 
         return response()->json([
@@ -183,9 +186,11 @@ class RecipientAuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        /** @var \App\Models\Recipient\Recipient $user */
+        /** @var Recipient $user */
         $user = $request->user();
         $user->currentAccessToken()?->delete();
+
+        UserLogService::log($user, 'Logged out');
 
         return response()->json([
             'message' => 'Logged out successfully.',

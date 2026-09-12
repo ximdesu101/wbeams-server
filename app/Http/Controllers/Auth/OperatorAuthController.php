@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\OperatorStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Operator\ActivateOperatorRequest;
 use App\Http\Requests\Operator\ForgotPasswordRequest;
@@ -9,7 +10,7 @@ use App\Http\Requests\Operator\LoginOperatorRequest;
 use App\Http\Requests\Operator\ResetPasswordRequest;
 use App\Mail\OperatorPasswordResetMail;
 use App\Models\Operator\Operator;
-use App\Enums\OperatorStatus;
+use App\Services\UserLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -22,18 +23,15 @@ class OperatorAuthController extends Controller
     // ============================================================
     // 1. AUTH / VALIDATE - Check if activation token is valid
     // ============================================================
-    
+
     /**
      * Validate an activation token for operator account setup
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function validateToken(Request $request): JsonResponse
     {
         $operator = $this->findByToken($request->query('token'));
 
-        if (!$operator) {
+        if (! $operator) {
             return $this->invalidTokenResponse();
         }
 
@@ -60,18 +58,15 @@ class OperatorAuthController extends Controller
     // ============================================================
     // 2. AUTH / ACTIVATE - Activate operator account with password
     // ============================================================
-    
+
     /**
      * Activate an operator account using a valid token
-     * 
-     * @param ActivateOperatorRequest $request
-     * @return JsonResponse
      */
     public function activate(ActivateOperatorRequest $request): JsonResponse
     {
         $operator = $this->findByToken($request->token);
 
-        if (!$operator) {
+        if (! $operator) {
             return $this->invalidTokenResponse();
         }
 
@@ -105,17 +100,14 @@ class OperatorAuthController extends Controller
     // ============================================================
     // 3. AUTH / LOGIN - Authenticate operator and issue token
     // ============================================================
-    
+
     /**
      * Authenticate an active operator and issue a Sanctum token
      * Implements rate limiting: 5 attempts per minute
-     * 
-     * @param LoginOperatorRequest $request
-     * @return JsonResponse
      */
     public function login(LoginOperatorRequest $request): JsonResponse
     {
-        $throttleKey = 'operator-login:' . strtolower($request->email) . '|' . $request->ip();
+        $throttleKey = 'operator-login:'.strtolower($request->email).'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
@@ -134,7 +126,7 @@ class OperatorAuthController extends Controller
             $operator->password ?? '$2y$10$invalidplaceholderhashvalueeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
         );
 
-        if (!$operator || !$passwordValid) {
+        if (! $operator || ! $passwordValid) {
             RateLimiter::hit($throttleKey, 60);
 
             return response()->json([
@@ -143,6 +135,8 @@ class OperatorAuthController extends Controller
         }
 
         RateLimiter::clear($throttleKey);
+
+        UserLogService::log($operator, 'Logged in');
 
         $token = $operator->createToken('operator-token')->plainTextToken;
 
@@ -156,18 +150,17 @@ class OperatorAuthController extends Controller
     // ============================================================
     // 4. AUTH / LOGOUT - Revoke current access token
     // ============================================================
-    
+
     /**
      * Logout the authenticated operator by revoking their current token
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function logout(Request $request): JsonResponse
     {
-        /** @var \App\Models\Operator\Operator $user */
+        /** @var Operator $user */
         $user = $request->user();
         $user->currentAccessToken()?->delete();
+
+        UserLogService::log($user, 'Logged out');
 
         return response()->json([
             'message' => 'Logged out successfully.',
@@ -184,7 +177,7 @@ class OperatorAuthController extends Controller
      */
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
-        $throttleKey = 'operator-forgot:' . strtolower($request->email) . '|' . $request->ip();
+        $throttleKey = 'operator-forgot:'.strtolower($request->email).'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
             $seconds = RateLimiter::availableIn($throttleKey);
@@ -209,7 +202,7 @@ class OperatorAuthController extends Controller
             ]);
 
             $resetUrl = rtrim((string) config('app.frontend_url'), '/')
-                . '/operator/reset-password?token=' . $plainToken;
+                .'/operator/reset-password?token='.$plainToken;
 
             try {
                 Mail::to($operator->email)->queue(
@@ -239,7 +232,7 @@ class OperatorAuthController extends Controller
     {
         $operator = $this->findByResetToken($request->query('token'));
 
-        if (!$operator) {
+        if (! $operator) {
             return response()->json([
                 'message' => 'Invalid or already used reset link.',
                 'status' => 'invalid',
@@ -280,7 +273,7 @@ class OperatorAuthController extends Controller
     {
         $operator = $this->findByResetToken($request->token);
 
-        if (!$operator) {
+        if (! $operator) {
             return response()->json([
                 'message' => 'Invalid or already used reset link.',
                 'status' => 'invalid',
@@ -320,33 +313,27 @@ class OperatorAuthController extends Controller
     // ============================================================
     // 8. AUTH / ME - Get authenticated operator profile
     // ============================================================
-    
+
     /**
      * Get the currently authenticated operator
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function me(Request $request): JsonResponse
     {
         return response()->json([
-            'operator' => $this->formatOperatorData(($u = $request->user()) instanceof Operator ? $u : throw new \LogicException("Expected Operator")),
+            'operator' => $this->formatOperatorData(($u = $request->user()) instanceof Operator ? $u : throw new \LogicException('Expected Operator')),
         ]);
     }
 
     // ============================================================
     // 6. HELPER METHODS - Supporting functions
     // ============================================================
-    
+
     /**
      * Find an operator by activation token
-     * 
-     * @param string|null $token
-     * @return Operator|null
      */
     protected function findByToken(?string $token): ?Operator
     {
-        if (!$token) {
+        if (! $token) {
             return null;
         }
 
@@ -360,7 +347,7 @@ class OperatorAuthController extends Controller
      */
     protected function findByResetToken(?string $token): ?Operator
     {
-        if (!$token) {
+        if (! $token) {
             return null;
         }
 
@@ -371,8 +358,6 @@ class OperatorAuthController extends Controller
 
     /**
      * Return response for invalid or already used token
-     * 
-     * @return JsonResponse
      */
     protected function invalidTokenResponse(): JsonResponse
     {
@@ -384,9 +369,6 @@ class OperatorAuthController extends Controller
 
     /**
      * Return response for expired token
-     * 
-     * @param Operator $operator
-     * @return JsonResponse
      */
     protected function expiredTokenResponse(Operator $operator): JsonResponse
     {
@@ -399,9 +381,6 @@ class OperatorAuthController extends Controller
 
     /**
      * Format operator data for API responses
-     * 
-     * @param Operator $operator
-     * @return array
      */
     /**
      * @return array<string, mixed>

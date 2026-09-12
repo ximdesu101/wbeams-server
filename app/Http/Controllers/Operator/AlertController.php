@@ -7,6 +7,7 @@ use App\Http\Requests\Operator\StoreAlertRequest;
 use App\Jobs\SendAlertEmailNotifications;
 use App\Jobs\SendAlertSmsNotifications;
 use App\Models\Operator\Alert;
+use App\Services\UserLogService;
 use App\Support\SseNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -86,6 +87,8 @@ class AlertController extends Controller
 
         SseNotifier::touch('alerts');
         SseNotifier::touch('recipient-alerts');
+
+        UserLogService::log($request->user(), 'Sent an emergency alert');
 
         if (in_array('email', $alert->channels, true)) {
             SendAlertEmailNotifications::dispatch($alert);

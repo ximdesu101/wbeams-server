@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\Recipient\Report;
-use Illuminate\Http\JsonResponse;
+use App\Services\UserLogService;
 use App\Support\SseNotifier;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,7 +14,7 @@ class ReportController extends Controller
 {
     private function mediaUrl(?string $path): ?string
     {
-        if (!$path) {
+        if (! $path) {
             return null;
         }
 
@@ -23,33 +24,33 @@ class ReportController extends Controller
     public function index(Request $request): JsonResponse
     {
         $reports = Report::with([
-                'recipient:id,first_name,last_name,role,email',
-                'handledByOperator:id,first_name,last_name,operator_id',
-            ])
+            'recipient:id,first_name,last_name,role,email',
+            'handledByOperator:id,first_name,last_name,operator_id',
+        ])
             ->orderByDesc('created_at')
             ->get()
             ->map(function (Report $report) {
                 $operator = $report->handledByOperator;
 
                 return [
-                    'id'               => $report->id,
-                    'EmergencyType'    => $report->title ?? '',
-                    'Description'      => $report->details ?? $report->title ?? '',
-                    'location'         => $report->location ?? '',
-                    'latitude'         => $report->latitude,
-                    'longitude'        => $report->longitude,
-                    'profile'          => $report->profile,
-                    'ReportedBy'       => trim(($report->recipient->first_name ?? '') . ' ' . ($report->recipient->last_name ?? '')),
-                    'DateReported'     => $report->created_at->toDateString(),
-                    'status'           => $report->status ?? '',
+                    'id' => $report->id,
+                    'EmergencyType' => $report->title ?? '',
+                    'Description' => $report->details ?? $report->title ?? '',
+                    'location' => $report->location ?? '',
+                    'latitude' => $report->latitude,
+                    'longitude' => $report->longitude,
+                    'profile' => $report->profile,
+                    'ReportedBy' => trim(($report->recipient->first_name ?? '').' '.($report->recipient->last_name ?? '')),
+                    'DateReported' => $report->created_at->toDateString(),
+                    'status' => $report->status ?? '',
                     'AssignedOperator' => $operator
-                        ? trim(($operator->first_name ?? '') . ' ' . ($operator->last_name ?? ''))
+                        ? trim(($operator->first_name ?? '').' '.($operator->last_name ?? ''))
                         : '',
-                    'ReviewAt'         => $report->status_updated_at?->format('Y-m-d H:i') ?? '',
-                    'has_video'        => $report->video_path !== null,
-                    'has_voice'        => $report->voice_path !== null,
-                    'video_url'        => $this->mediaUrl($report->video_path),
-                    'voice_url'        => $this->mediaUrl($report->voice_path),
+                    'ReviewAt' => $report->status_updated_at?->format('Y-m-d H:i') ?? '',
+                    'has_video' => $report->video_path !== null,
+                    'has_voice' => $report->voice_path !== null,
+                    'video_url' => $this->mediaUrl($report->video_path),
+                    'voice_url' => $this->mediaUrl($report->voice_path),
                 ];
             });
 
@@ -64,17 +65,25 @@ class ReportController extends Controller
 
         $model = Report::find($report);
 
-        if (!$model) {
+        if (! $model) {
             return response()->json(['message' => 'Report not found.'], 404);
         }
 
         $operator = $request->user();
 
         $model->update([
-            'status'                 => $validated['status'],
+            'status' => $validated['status'],
             'handled_by_operator_id' => $operator?->id,
-            'status_updated_at'      => now(),
+            'status_updated_at' => now(),
         ]);
+
+        if ($operator && in_array($validated['status'], ['resolved', 'rejected'], true)) {
+            $activityMap = [
+                'resolved' => 'Resolved a reported incident',
+                'rejected' => 'Rejected a reported incident',
+            ];
+            UserLogService::log($operator, $activityMap[$validated['status']]);
+        }
 
         $model->load('handledByOperator:id,first_name,last_name,operator_id');
 
@@ -85,12 +94,12 @@ class ReportController extends Controller
         return response()->json([
             'message' => 'Report status updated successfully.',
             'data' => [
-                'id'               => $model->id,
-                'status'           => $model->status,
+                'id' => $model->id,
+                'status' => $model->status,
                 'AssignedOperator' => $op
-                    ? trim(($op->first_name ?? '') . ' ' . ($op->last_name ?? ''))
+                    ? trim(($op->first_name ?? '').' '.($op->last_name ?? ''))
                     : '',
-                'ReviewAt'         => $model->status_updated_at?->format('Y-m-d H:i') ?? '',
+                'ReviewAt' => $model->status_updated_at?->format('Y-m-d H:i') ?? '',
             ],
         ]);
     }

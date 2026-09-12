@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\OperatorController;
 use App\Http\Controllers\Admin\RecipientController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SseController;
+use App\Http\Controllers\Admin\UserLogController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\OperatorAuthController;
 use App\Http\Controllers\Auth\RecipientAuthController;
@@ -37,6 +38,7 @@ Route::prefix('admin')->group(function () {
         Route::delete('/alerts/{alert}', [AlertController::class, 'destroy']);
         Route::get('/reports', [ReportController::class, 'index']);
         Route::get('/reports/stats', [ReportController::class, 'stats']);
+        Route::get('/user-logs', [UserLogController::class, 'index']);
     });
 });
 
