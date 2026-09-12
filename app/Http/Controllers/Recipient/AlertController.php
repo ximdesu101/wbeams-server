@@ -38,7 +38,9 @@ class AlertController extends Controller
             ->map(function ($alert) use ($reads) {
                 $read = $reads->get($alert->id);
                 $alert->is_read = $read !== null;
-                $alert->acknowledged_via = $read?->acknowledged_via;
+                $alert->acknowledged_via = $alert->status === 'resolved'
+                    ? 'Resolved'
+                    : $read?->acknowledged_via;
 
                 return $alert;
             });
@@ -56,6 +58,7 @@ class AlertController extends Controller
         $recipient = $request->user();
 
         $alerts = Alert::whereJsonContains('target_roles', $recipient->role)
+            ->where('status', '!=', 'resolved')
             ->whereDoesntHave('reads', function ($query) use ($recipient) {
                 $query->where('recipient_id', $recipient->id);
             })

@@ -38,6 +38,7 @@ class Alert extends Model
         'channels',
         'status',
         'sent_at',
+        'resolved_at',
     ];
 
     protected $casts = [
@@ -45,6 +46,7 @@ class Alert extends Model
         'target_roles' => 'array',
         'channels' => 'array',
         'sent_at' => 'datetime',
+        'resolved_at' => 'datetime',
     ];
 
     /** @return BelongsTo<AlertType, $this> */

@@ -68,6 +68,10 @@ class AlertController extends Controller
                     : null,
                 'sent_at' => $alert->sent_at->toIso8601String(),
                 'sent_at_label' => $alert->sent_at->timezone(config('app.timezone'))->format('M j, Y g:i A'),
+                'resolved_at' => $alert->resolved_at?->toIso8601String(),
+                'resolved_at_label' => $alert->resolved_at
+                    ? $alert->resolved_at->timezone(config('app.timezone'))->format('M j, Y g:i A')
+                    : null,
             ];
         });
 
@@ -99,5 +103,39 @@ class AlertController extends Controller
         }
 
         return response()->json($alert, 201);
+    }
+
+    public function resolve(Request $request, Alert $alert): JsonResponse
+    {
+        // Only the operator who sent the alert can resolve it
+        if ($alert->operator_id !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        if ($alert->status === 'resolved') {
+            return response()->json(['message' => 'Alert is already resolved.'], 422);
+        }
+
+        $alert->update([
+            'status' => 'resolved',
+            'resolved_at' => now(),
+        ]);
+
+        $alert->refresh();
+
+        SseNotifier::touch('alerts');
+        SseNotifier::touch('recipient-alerts');
+
+        return response()->json([
+            'message' => 'Alert resolved successfully.',
+            'data' => [
+                'id' => $alert->id,
+                'status' => $alert->status,
+                'resolved_at' => $alert->resolved_at->toIso8601String(),
+                'resolved_at_label' => $alert->resolved_at
+                    ->timezone(config('app.timezone'))
+                    ->format('M j, Y g:i A'),
+            ],
+        ]);
     }
 }

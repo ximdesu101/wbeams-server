@@ -124,6 +124,7 @@ Route::prefix('operator/emergency-categories')->middleware('auth:sanctum,operato
 Route::prefix('operator/alerts')->middleware('auth:sanctum,operator')->group(function () {
     Route::get('/', [OperatorAlertController::class, 'index']);
     Route::post('/', [OperatorAlertController::class, 'store']);
+    Route::patch('/{alert}/resolve', [OperatorAlertController::class, 'resolve']);
 });
 
 Route::prefix('operator/reports')->middleware('auth:sanctum,operator')->group(function () {
