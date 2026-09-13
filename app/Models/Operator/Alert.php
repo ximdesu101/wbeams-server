@@ -3,6 +3,7 @@
 namespace App\Models\Operator;
 
 use App\Models\Admin\AlertType;
+use App\Models\Recipient\AlertFeedback;
 use Database\Factories\AlertFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -65,5 +66,11 @@ class Alert extends Model
     public function reads(): HasMany
     {
         return $this->hasMany(AlertRecipientRead::class);
+    }
+
+    /** @return HasMany<AlertFeedback, $this> */
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(AlertFeedback::class);
     }
 }

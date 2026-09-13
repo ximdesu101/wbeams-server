@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AccessRequestController;
 use App\Http\Controllers\Admin\AlertController;
 use App\Http\Controllers\Admin\AlertTypeController;
 use App\Http\Controllers\Admin\EmergencyCategoryController;
+use App\Http\Controllers\Admin\FeedbackController as AdminFeedbackController;
 use App\Http\Controllers\Admin\MasterlistController;
 use App\Http\Controllers\Admin\OperatorController;
 use App\Http\Controllers\Admin\RecipientController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Operator\AlertController as OperatorAlertController;
 use App\Http\Controllers\Operator\EmergencyCategoryController as OperatorEmergencyCategoryController;
 use App\Http\Controllers\Operator\ReportController as OperatorReportController;
 use App\Http\Controllers\Recipient\AlertController as RecipientAlertController;
+use App\Http\Controllers\Recipient\FeedbackController as RecipientFeedbackController;
 use App\Http\Controllers\Recipient\ReportController as RecipientReportController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +41,9 @@ Route::prefix('admin')->group(function () {
         Route::get('/reports', [ReportController::class, 'index']);
         Route::get('/reports/stats', [ReportController::class, 'stats']);
         Route::get('/user-logs', [UserLogController::class, 'index']);
+        Route::get('/feedback', [AdminFeedbackController::class, 'index']);
+        Route::get('/feedback/stats', [AdminFeedbackController::class, 'stats']);
+        Route::get('/feedback/{type}/{id}', [AdminFeedbackController::class, 'show']);
     });
 });
 
@@ -161,6 +166,16 @@ Route::prefix('recipient/reports')->middleware('auth:sanctum,recipient')->group(
     Route::get('/', [RecipientReportController::class, 'index']);
     Route::post('/', [RecipientReportController::class, 'store']);
     Route::delete('/{report}', [RecipientReportController::class, 'destroy']);
+});
+
+// Recipient-submitted feedback
+Route::prefix('recipient')->middleware('auth:sanctum,recipient')->group(function () {
+    Route::get('/alerts/{alert}/feedback', [RecipientFeedbackController::class, 'showAlertFeedback']);
+    Route::post('/alerts/{alert}/feedback', [RecipientFeedbackController::class, 'storeAlertFeedback']);
+    Route::get('/feedback/operator', [RecipientFeedbackController::class, 'showOperatorFeedback']);
+    Route::post('/feedback/operator', [RecipientFeedbackController::class, 'storeOperatorFeedback']);
+    Route::get('/feedback/system', [RecipientFeedbackController::class, 'showSystemFeedback']);
+    Route::post('/feedback/system', [RecipientFeedbackController::class, 'storeSystemFeedback']);
 });
 
 // Recipient-send alerts

@@ -3,9 +3,9 @@
 namespace App\Models\Recipient;
 
 use App\Models\Operator\AlertRecipientRead;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Database\Factories\RecipientFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -67,4 +67,23 @@ class Recipient extends Authenticatable
     {
         return $this->status === 'deactivated';
     }
+
+    /** @return HasMany<AlertFeedback, $this> */
+    public function alertFeedback(): HasMany
+    {
+        return $this->hasMany(AlertFeedback::class);
+    }
+
+    /** @return HasMany<OperatorFeedback, $this> */
+    public function operatorFeedback(): HasMany
+    {
+        return $this->hasMany(OperatorFeedback::class);
+    }
+
+    /** @return HasMany<SystemFeedback, $this> */
+    public function systemFeedback(): HasMany
+    {
+        return $this->hasMany(SystemFeedback::class);
+    }
+
 }
