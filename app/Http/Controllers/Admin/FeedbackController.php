@@ -148,23 +148,50 @@ class FeedbackController extends Controller
         $helpful = AlertFeedback::where('rating', 'like')->count();
         $notHelpful = AlertFeedback::where('rating', 'dislike')->count();
 
+        $operatorTotal = OperatorFeedback::count();
+        $systemTotal = SystemFeedback::count();
+
         $avgOperator = OperatorFeedback::avg('rating');
         $avgSystem = SystemFeedback::avg('rating');
 
+        $operatorDistribution = [];
+        $systemDistribution = [];
+        for ($i = 5; $i >= 1; $i--) {
+            $operatorDistribution[] = [
+                'rating' => $i,
+                'reviews' => OperatorFeedback::where('rating', $i)->count(),
+            ];
+            $systemDistribution[] = [
+                'rating' => $i,
+                'reviews' => SystemFeedback::where('rating', $i)->count(),
+            ];
+        }
+
+        $helpfulPercent = $alertTotal > 0
+            ? round(($helpful / $alertTotal) * 100)
+            : 0;
+        $notHelpfulPercent = $alertTotal > 0
+            ? round(($notHelpful / $alertTotal) * 100)
+            : 0;
+
         return response()->json([
             'data' => [
-                'totalFeedback' => $alertTotal + OperatorFeedback::count() + SystemFeedback::count(),
+                'totalFeedback' => $alertTotal + $operatorTotal + $systemTotal,
                 'helpfulAlerts' => $helpful,
                 'notHelpfulAlerts' => $notHelpful,
+                'helpfulPercent' => $helpfulPercent,
+                'notHelpfulPercent' => $notHelpfulPercent,
                 'alertFeedbackCount' => $alertTotal,
-                'operatorFeedbackCount' => OperatorFeedback::count(),
-                'systemFeedbackCount' => SystemFeedback::count(),
+                'operatorFeedbackCount' => $operatorTotal,
+                'systemFeedbackCount' => $systemTotal,
                 'averageOperatorRating' => $avgOperator !== null
                     ? round((float) $avgOperator, 1)
                     : 0,
                 'averageSystemRating' => $avgSystem !== null
                     ? round((float) $avgSystem, 1)
                     : 0,
+                'operatorRatingDistribution' => $operatorDistribution,
+                'systemRatingDistribution' => $systemDistribution,
             ],
         ]);
     }
