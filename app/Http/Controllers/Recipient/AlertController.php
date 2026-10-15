@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Recipient;
 
 use App\Http\Controllers\Controller;
+use App\Models\NotificationLog;
 use App\Models\Operator\Alert;
 use App\Models\Operator\AlertRecipientRead;
 use App\Models\Recipient\Recipient;
@@ -166,6 +167,8 @@ class AlertController extends Controller
             ]
         );
 
+        $this->markDeliveryConfirmed($alert, $recipient, 'email');
+
         UserLogService::log($recipient, 'Acknowledged an alert');
 
         SseNotifier::touch('recipient-alerts');
@@ -197,6 +200,8 @@ class AlertController extends Controller
             ]
         );
 
+        $this->markDeliveryConfirmed($alert, $recipient, 'sms');
+
         UserLogService::log($recipient, 'Acknowledged an alert');
 
         SseNotifier::touch('recipient-alerts');
@@ -205,5 +210,23 @@ class AlertController extends Controller
             'alert' => $alert,
             'recipient' => $recipient,
         ]);
+    }
+
+    private function markDeliveryConfirmed(Alert $alert, Recipient $recipient, string $channel): void
+    {
+        $delivery = NotificationLog::query()
+            ->where('alert_id', $alert->id)
+            ->where('recipient_id', $recipient->id)
+            ->where('channel', $channel)
+            ->first();
+
+        if ($delivery && $delivery->status !== NotificationLog::STATUS_DELIVERED) {
+            $delivery->update([
+                'status' => NotificationLog::STATUS_DELIVERED,
+                'sent_at' => $delivery->sent_at ?? now(),
+                'delivered_at' => now(),
+                'failed_at' => null,
+            ]);
+        }
     }
 }

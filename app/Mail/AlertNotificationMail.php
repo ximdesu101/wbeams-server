@@ -4,17 +4,12 @@ namespace App\Mail;
 
 use App\Models\Operator\Alert;
 use App\Models\Recipient\Recipient;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
-use Illuminate\Queue\SerializesModels;
 
-class AlertNotificationMail extends Mailable implements ShouldQueue
+class AlertNotificationMail extends Mailable
 {
-    use Queueable, SerializesModels;
-
     public function __construct(
         public Alert $alert,
         public Recipient $recipient,

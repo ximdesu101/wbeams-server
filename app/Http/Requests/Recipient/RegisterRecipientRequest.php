@@ -23,6 +23,7 @@ class RegisterRecipientRequest extends FormRequest
             'last_name' => ['required', 'string'],
             'contact_number' => ['required', 'string'],
             'email' => ['required', 'email', 'unique:recipients,email'],
+            'email_code' => ['required', 'digits:6'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ];
     }

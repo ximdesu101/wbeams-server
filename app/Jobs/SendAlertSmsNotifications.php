@@ -2,50 +2,185 @@
 
 namespace App\Jobs;
 
+use App\Models\NotificationLog;
 use App\Models\Operator\Alert;
 use App\Models\Recipient\Recipient;
 use App\Services\PhilSmsService;
 use App\Support\AlertSmsMessage;
 use App\Support\PhilippinePhoneNumber;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
+use LogicException;
+use Throwable;
 
-class SendAlertSmsNotifications implements ShouldQueue
+class SendAlertSmsNotifications implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public Alert $alert) {}
+    public int $tries = 3;
+
+    /** @var array<int, int> */
+    public array $backoff = [10, 30];
+
+    public int $uniqueFor = 3600;
+
+    public ?Alert $alert = null;
+
+    public ?int $notificationLogId = null;
+
+    public function __construct(Alert|int $deliveryOrAlert)
+    {
+        if ($deliveryOrAlert instanceof Alert) {
+            $this->alert = $deliveryOrAlert;
+        } else {
+            $this->notificationLogId = $deliveryOrAlert;
+        }
+    }
+
+    public function uniqueId(): string
+    {
+        return (string) ($this->notificationLogId ?? 'alert-'.$this->alert?->id);
+    }
 
     public function handle(PhilSmsService $philSmsService): void
     {
-        $recipients = Recipient::whereIn('role', $this->alert->target_roles)->get();
+        if ($this->notificationLogId === null) {
+            $this->dispatchLegacyDeliveries();
 
-        foreach ($recipients as $recipient) {
-            $phoneNumber = PhilippinePhoneNumber::normalize($recipient->contact_number);
+            return;
+        }
 
-            if ($phoneNumber === null) {
-                Log::warning('Skipping alert SMS for recipient without a valid contact number', [
-                    'alert_id' => $this->alert->id,
-                    'recipient_id' => $recipient->id,
+        $delivery = NotificationLog::with(['alert', 'recipient'])->findOrFail($this->notificationLogId);
+
+        if (in_array($delivery->status, [
+            NotificationLog::STATUS_SENT,
+            NotificationLog::STATUS_DELIVERED,
+        ], true)) {
+            return;
+        }
+
+        $retryAfter = (int) config('queue.connections.'.config('queue.default').'.retry_after', 90);
+        $claimableStatuses = [
+            NotificationLog::STATUS_QUEUED,
+            NotificationLog::STATUS_FAILED,
+        ];
+
+        $claim = NotificationLog::query()
+            ->whereKey($delivery->id)
+            ->where(function ($query) use ($claimableStatuses, $retryAfter) {
+                $query->whereIn('status', $claimableStatuses)
+                    ->orWhere(function ($query) use ($retryAfter) {
+                        $query->where('status', NotificationLog::STATUS_PROCESSING)
+                            ->where('updated_at', '<=', now()->subSeconds($retryAfter));
+                    });
+            });
+        $claimed = $claim
+            ->update([
+                'status' => NotificationLog::STATUS_PROCESSING,
+                'failed_at' => null,
+                'updated_at' => now(),
+            ]);
+
+        if (! $claimed) {
+            return;
+        }
+
+        $phoneNumber = PhilippinePhoneNumber::normalize($delivery->recipient->contact_number);
+
+        if ($phoneNumber === null) {
+            Log::warning('Skipping alert SMS for recipient without a valid contact number', [
+                'alert_id' => $delivery->alert->id,
+                'recipient_id' => $delivery->recipient->id,
+            ]);
+
+            NotificationLog::query()
+                ->whereKey($delivery->id)
+                ->where('status', NotificationLog::STATUS_PROCESSING)
+                ->update([
+                    'status' => NotificationLog::STATUS_FAILED,
+                    'failed_at' => now(),
+                    'updated_at' => now(),
                 ]);
 
-                continue;
-            }
+            return;
+        }
 
+        try {
             $acknowledgeUrl = URL::signedRoute(
                 'recipient.alerts.acknowledge-sms',
                 [
-                    'alert' => $this->alert->id,
-                    'recipient' => $recipient->id,
+                    'alert' => $delivery->alert->id,
+                    'recipient' => $delivery->recipient->id,
                 ],
                 now()->addDays(7),
             );
 
-            $message = AlertSmsMessage::build($this->alert, $recipient, $acknowledgeUrl);
+            $message = AlertSmsMessage::build($delivery->alert, $delivery->recipient, $acknowledgeUrl);
 
             $philSmsService->send($phoneNumber, $message);
+
+            NotificationLog::query()
+                ->whereKey($delivery->id)
+                ->where('status', NotificationLog::STATUS_PROCESSING)
+                ->update([
+                    'status' => NotificationLog::STATUS_SENT,
+                    'sent_at' => now(),
+                    'updated_at' => now(),
+                ]);
+        } catch (Throwable $exception) {
+            NotificationLog::query()
+                ->whereKey($delivery->id)
+                ->where('status', NotificationLog::STATUS_PROCESSING)
+                ->update([
+                    'status' => NotificationLog::STATUS_QUEUED,
+                    'updated_at' => now(),
+                ]);
+
+            throw $exception;
+        }
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        if ($this->notificationLogId === null) {
+            return;
+        }
+
+        NotificationLog::query()
+            ->whereKey($this->notificationLogId)
+            ->whereIn('status', [
+                NotificationLog::STATUS_QUEUED,
+                NotificationLog::STATUS_PROCESSING,
+            ])
+            ->update([
+                'status' => NotificationLog::STATUS_FAILED,
+                'failed_at' => now(),
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function dispatchLegacyDeliveries(): void
+    {
+        if ($this->alert === null) {
+            throw new LogicException('The SMS job is missing its delivery or legacy alert data.');
+        }
+
+        $recipients = Recipient::query()->whereIn('role', $this->alert->target_roles)->get();
+
+        foreach ($recipients as $recipient) {
+            $delivery = NotificationLog::firstOrCreate(
+                [
+                    'alert_id' => $this->alert->id,
+                    'recipient_id' => $recipient->id,
+                    'channel' => 'sms',
+                ],
+                ['status' => NotificationLog::STATUS_QUEUED]
+            );
+
+            self::dispatch($delivery->id)->afterCommit();
         }
     }
 }

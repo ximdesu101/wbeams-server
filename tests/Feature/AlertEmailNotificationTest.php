@@ -3,6 +3,7 @@
 use App\Jobs\SendAlertEmailNotifications;
 use App\Mail\AlertNotificationMail;
 use App\Models\Admin\AlertType;
+use App\Models\NotificationLog;
 use App\Models\Operator\Alert;
 use App\Models\Operator\AlertRecipientRead;
 use App\Models\Operator\Operator;
@@ -21,6 +22,7 @@ test('storing an alert with email channel dispatches SendAlertEmailNotifications
     $operator = Operator::factory()->active()->create();
 
     $alertType = AlertType::factory()->create();
+    $recipient = Recipient::factory()->student()->create();
 
     $this->actingAs($operator, 'operator')
         ->postJson('/api/operator/alerts', [
@@ -33,8 +35,8 @@ test('storing an alert with email channel dispatches SendAlertEmailNotifications
         ])
         ->assertStatus(201);
 
-    Queue::assertPushed(SendAlertEmailNotifications::class, function ($job) {
-        return $job->alert->title === 'Test Emergency';
+    Queue::assertPushed(SendAlertEmailNotifications::class, function ($job) use ($recipient) {
+        return NotificationLog::find($job->notificationLogId)?->recipient_id === $recipient->id;
     });
 });
 
@@ -62,31 +64,49 @@ test('storing an alert without email channel does not dispatch SendAlertEmailNot
 // SendAlertEmailNotifications job — queues mail per recipient
 // ============================================================
 
-test('SendAlertEmailNotifications queues one mail per targeted recipient', function () {
+test('SendAlertEmailNotifications sends one mail per targeted recipient', function () {
     Mail::fake();
 
     $alert = Alert::factory()->forRoles(['student'])->withEmail()->create();
 
-    Recipient::factory()->student()->count(3)->create();
+    $recipients = Recipient::factory()->student()->count(3)->create();
     Recipient::factory()->faculty()->count(2)->create(); // should not receive
 
-    (new SendAlertEmailNotifications($alert))->handle();
+    foreach ($recipients as $recipient) {
+        $delivery = NotificationLog::create([
+            'alert_id' => $alert->id,
+            'recipient_id' => $recipient->id,
+            'channel' => 'email',
+        ]);
 
-    Mail::assertQueued(AlertNotificationMail::class, 3);
+        (new SendAlertEmailNotifications($delivery->id))->handle();
+        (new SendAlertEmailNotifications($delivery->id))->handle();
+    }
+
+    Mail::assertSent(AlertNotificationMail::class, 3);
+    expect(NotificationLog::where('channel', 'email')->where('status', 'sent')->count())->toBe(3);
 });
 
-test('SendAlertEmailNotifications queues mail only to recipients matching target roles', function () {
+test('SendAlertEmailNotifications sends mail only to recipients matching target roles', function () {
     Mail::fake();
 
     $alert = Alert::factory()->forRoles(['faculty', 'staff'])->withEmail()->create();
 
-    Recipient::factory()->faculty()->count(2)->create();
-    Recipient::factory()->staff()->count(1)->create();
+    $recipients = Recipient::factory()->faculty()->count(2)->create()
+        ->merge(Recipient::factory()->staff()->count(1)->create());
     Recipient::factory()->student()->count(4)->create(); // not targeted
 
-    (new SendAlertEmailNotifications($alert))->handle();
+    foreach ($recipients as $recipient) {
+        $delivery = NotificationLog::create([
+            'alert_id' => $alert->id,
+            'recipient_id' => $recipient->id,
+            'channel' => 'email',
+        ]);
 
-    Mail::assertQueued(AlertNotificationMail::class, 3);
+        (new SendAlertEmailNotifications($delivery->id))->handle();
+    }
+
+    Mail::assertSent(AlertNotificationMail::class, 3);
 });
 
 // ============================================================
@@ -96,6 +116,13 @@ test('SendAlertEmailNotifications queues mail only to recipients matching target
 test('valid signed acknowledge URL marks alert as read and returns confirmation page', function () {
     $alert = Alert::factory()->forRoles(['student'])->create();
     $recipient = Recipient::factory()->student()->create();
+    NotificationLog::create([
+        'alert_id' => $alert->id,
+        'recipient_id' => $recipient->id,
+        'channel' => 'email',
+        'status' => NotificationLog::STATUS_SENT,
+        'sent_at' => now(),
+    ]);
 
     $url = URL::signedRoute(
         'recipient.alerts.acknowledge-email',
@@ -109,6 +136,12 @@ test('valid signed acknowledge URL marks alert as read and returns confirmation 
         'alert_id' => $alert->id,
         'recipient_id' => $recipient->id,
         'acknowledged_via' => 'email',
+    ]);
+    $this->assertDatabaseHas('notification_logs', [
+        'alert_id' => $alert->id,
+        'recipient_id' => $recipient->id,
+        'channel' => 'email',
+        'status' => NotificationLog::STATUS_DELIVERED,
     ]);
 });
 

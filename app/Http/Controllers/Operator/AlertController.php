@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Operator\StoreAlertRequest;
 use App\Jobs\SendAlertEmailNotifications;
 use App\Jobs\SendAlertSmsNotifications;
+use App\Models\NotificationLog;
 use App\Models\Operator\Alert;
+use App\Models\Recipient\Recipient;
 use App\Services\UserLogService;
 use App\Support\SseNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AlertController extends Controller
 {
@@ -82,25 +85,47 @@ class AlertController extends Controller
 
     public function store(StoreAlertRequest $request): JsonResponse
     {
-        $alert = Alert::create([
-            ...$request->validated(),
-            'operator_id' => $request->user()->id,
-            'status' => 'sent',
-            'sent_at' => now(),
-        ]);
+        $alert = DB::transaction(function () use ($request) {
+            $alert = Alert::create([
+                ...$request->validated(),
+                'operator_id' => $request->user()->id,
+                'status' => 'sent',
+                'sent_at' => now(),
+            ]);
+
+            if (in_array('email', $alert->channels, true) || in_array('sms', $alert->channels, true)) {
+                $recipients = Recipient::whereIn('role', $alert->target_roles)->get();
+
+                foreach ($recipients as $recipient) {
+                    if (in_array('email', $alert->channels, true)) {
+                        $delivery = NotificationLog::create([
+                            'alert_id' => $alert->id,
+                            'recipient_id' => $recipient->id,
+                            'channel' => 'email',
+                        ]);
+
+                        SendAlertEmailNotifications::dispatch($delivery->id)->afterCommit();
+                    }
+
+                    if (in_array('sms', $alert->channels, true)) {
+                        $delivery = NotificationLog::create([
+                            'alert_id' => $alert->id,
+                            'recipient_id' => $recipient->id,
+                            'channel' => 'sms',
+                        ]);
+
+                        SendAlertSmsNotifications::dispatch($delivery->id)->afterCommit();
+                    }
+                }
+            }
+
+            return $alert;
+        });
 
         SseNotifier::touch('alerts');
         SseNotifier::touch('recipient-alerts');
 
         UserLogService::log($request->user(), 'Sent an emergency alert');
-
-        if (in_array('email', $alert->channels, true)) {
-            SendAlertEmailNotifications::dispatch($alert);
-        }
-
-        if (in_array('sms', $alert->channels, true)) {
-            SendAlertSmsNotifications::dispatch($alert);
-        }
 
         return response()->json($alert, 201);
     }

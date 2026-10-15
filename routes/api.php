@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccessRequestController;
 use App\Http\Controllers\Admin\AlertController;
 use App\Http\Controllers\Admin\AlertTypeController;
+use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\EmergencyCategoryController;
 use App\Http\Controllers\Admin\FeedbackController as AdminFeedbackController;
 use App\Http\Controllers\Admin\MasterlistController;
@@ -44,6 +45,19 @@ Route::prefix('admin')->group(function () {
         Route::get('/feedback', [AdminFeedbackController::class, 'index']);
         Route::get('/feedback/stats', [AdminFeedbackController::class, 'stats']);
         Route::get('/feedback/{type}/{id}', [AdminFeedbackController::class, 'show']);
+
+        // Analytics
+        Route::prefix('analytics')->group(function () {
+            Route::get('/alert-channel', [AnalyticsController::class, 'alertChannel']);
+            Route::get('/acknowledge-via', [AnalyticsController::class, 'acknowledgeVia']);
+            Route::get('/email-metrics', [AnalyticsController::class, 'emailMetrics']);
+            Route::get('/email-delivery-performance', [AnalyticsController::class, 'emailDeliveryPerformance']);
+            Route::get('/sms-metrics', [AnalyticsController::class, 'smsMetrics']);
+            Route::get('/sms-delivery-performance', [AnalyticsController::class, 'smsDeliveryPerformance']);
+            Route::get('/emergency-category', [AnalyticsController::class, 'emergencyCategory']);
+            Route::get('/response-metrics', [AnalyticsController::class, 'responseMetrics']);
+            Route::get('/geographic-summary', [AnalyticsController::class, 'geographicSummary']);
+        });
     });
 });
 
@@ -144,6 +158,10 @@ Route::prefix('recipient')->group(function () {
     Route::post('/register', [RecipientAuthController::class, 'register']);
     Route::post('/request-access', [RecipientAuthController::class, 'requestAccess']);
     Route::post('/login', [RecipientAuthController::class, 'login']);
+    Route::post('/registration/send-code', [RecipientAuthController::class, 'sendRegistrationCode']);
+    Route::post('/registration/verify-code', [RecipientAuthController::class, 'verifyRegistrationCode']);
+    Route::post('/password/send-reset-code', [RecipientAuthController::class, 'sendPasswordResetCode']);
+    Route::post('/password/reset', [RecipientAuthController::class, 'resetPassword']);
 
     Route::middleware('auth:sanctum,recipient')->group(function () {
         Route::get('/me', [RecipientAuthController::class, 'me']);
